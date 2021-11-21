@@ -15,7 +15,7 @@
 #include <string>
 #include <utility>
 #include <vector>
-
+#include <map>
 #include "xenia/base/memory.h"
 #include "xenia/base/mutex.h"
 #include "xenia/cpu/mmio_handler.h"
@@ -438,6 +438,63 @@ class Memory {
   bool Save(ByteStream* stream);
   bool Restore(ByteStream* stream);
 
+    int named_memregion_nbytes_left;
+    char* last_named_memregion = nullptr;
+  uint32_t locate_named_memory_region(const char* name) {
+    named_memory_lock.lock();
+    auto iter = named_memory32.find(name);
+    uint32_t result = 0;
+    if(iter!=named_memory32.end()) {
+       result=iter->second;
+    }
+    named_memory_lock.unlock();
+    return result;
+  }
+
+  void add_named_memory_region(const char* name, uint32_t offset) {
+     named_memory_lock.lock();
+     auto res = named_memory32.try_emplace(name, offset);
+     assert_always(res.second);
+
+     named_memory_lock.unlock();
+  }
+
+  uint32_t find_or_init_named_memory_region(const char* name, void* initdata, unsigned datsz, memory::PageAccess access, uintptr_t start = 4096) {
+     named_memory_lock.lock();
+     auto iter = named_memory32.find(name);
+     if(iter == named_memory32.end()) {
+         void* r;
+
+         if(last_named_memregion && named_memregion_nbytes_left >= (int)datsz) {
+            
+             
+            r = last_named_memregion;
+            last_named_memregion += datsz;
+            named_memregion_nbytes_left -= datsz;
+
+         } else{
+             r = memory::allocate32(start, datsz, memory::PageAccess::kReadWrite);
+
+             named_memregion_nbytes_left = system_allocation_granularity_ - datsz;
+
+             last_named_memregion = ((char*)r) + datsz;
+
+
+         }
+        memcpy(r, initdata, datsz);
+        if(access!=memory::PageAccess::kReadWrite) {
+            memory::Protect(r, datsz, access);
+        }
+        named_memory32[name] = (uint32_t)r;
+        named_memory_lock.unlock();
+        return (uint32_t)r;
+     }
+     uint32_t result = iter->second;
+     named_memory_lock.unlock();
+     return result;
+  }
+
+
  private:
   int MapViews(uint8_t* mapping_base);
   void UnmapViews();
@@ -495,6 +552,12 @@ class Memory {
   };
   xe::global_critical_region global_critical_region_;
   std::vector<PhysicalWriteWatchEntry*> physical_write_watches_;
+  /*
+     for x64 emitters
+     allocations in low 32 bits of memory with assigned names
+  */
+  std::map<std::string, uint32_t> named_memory32;
+  std::mutex named_memory_lock;
 };
 
 }  // namespace xe

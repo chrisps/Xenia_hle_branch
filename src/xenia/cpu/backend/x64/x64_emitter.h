@@ -25,6 +25,48 @@
 #include "third_party/xbyak/xbyak/xbyak_bin2hex.h"
 #include "third_party/xbyak/xbyak/xbyak_util.h"
 
+enum class xeot_t : std::uint64_t {
+    Address,
+    Reg,
+    RegExpr,
+    Constant
+
+};
+
+struct xbopnd_t {
+  xeot_t m_optype;
+  union {
+      Xbyak::Address m_addr;
+      Xbyak::Reg m_register;
+      Xbyak::RegExp m_regexpr;
+      uintptr_t m_constant;
+  };
+};
+
+namespace xeopc_t {
+    enum {
+        mov,
+        movzx,
+        movsx,
+        movsxd, 
+        vmovaps, and_, shl, vpcmpgtd, vpsubd,
+          vblendvps,
+          vcvtdq2ps,
+          vpandn,
+          vaddps,
+  vmaxps,
+  vminps,
+  vcmpgeps,
+  vsubps
+    };
+
+}
+struct xbinsn_t {
+    
+
+};
+
+
 namespace xe {
 namespace cpu {
 class Processor;
@@ -114,7 +156,8 @@ enum XmmConst {
   XMMIntMaxPD,
   XMMPosIntMinPS,
   XMMQNaN,
-  XMMOneDouble
+  XMMOneDouble,
+  XMMBungieTinyNum,
 };
 
 // Unfortunately due to the design of xbyak we have to pass this to the ctor.
@@ -224,8 +267,9 @@ class X64Emitter : public Xbyak::CodeGenerator {
   }
 
   FunctionDebugInfo* debug_info() const { return debug_info_; }
-
+  X64CodeCache* code_cache() {return code_cache_;}
   size_t stack_size() const { return stack_size_; }
+       uint32_t currentfunc;
 
  protected:
   void* Emplace(const EmitFunctionInfo& func_info,
@@ -235,6 +279,7 @@ class X64Emitter : public Xbyak::CodeGenerator {
   void EmitTraceUserCallReturn();
 
  protected:
+
   Processor* processor_ = nullptr;
   X64Backend* backend_ = nullptr;
   X64CodeCache* code_cache_ = nullptr;

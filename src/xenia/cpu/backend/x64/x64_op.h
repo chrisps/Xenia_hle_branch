@@ -253,7 +253,8 @@ struct V128Op : ValueOp<V128Op, KEY_TYPE_V_V128, Xmm, vec128_t> {
     return BASE::value->constant.v128;
   }
 };
-
+template<typename Reserved = void, typename... ITypes>
+struct MultiSeqBuilder;
 template <typename DEST, typename... Tf>
 struct DestField;
 template <typename DEST>
@@ -295,6 +296,8 @@ struct I<OPCODE, DEST> : DestField<DEST> {
     }
     return false;
   }
+      template<typename Reserved, typename... ITypes>
+  friend struct MultiSeqBuilder;
 };
 template <hir::Opcode OPCODE, typename DEST, typename SRC1>
 struct I<OPCODE, DEST, SRC1> : DestField<DEST> {
@@ -308,6 +311,7 @@ struct I<OPCODE, DEST, SRC1> : DestField<DEST> {
   SRC1 src1;
 
  protected:
+     friend class MultiSequence;
   template <typename SEQ, typename T>
   friend struct Sequence;
   bool Load(const Instr* i) {
@@ -318,7 +322,10 @@ struct I<OPCODE, DEST, SRC1> : DestField<DEST> {
     }
     return false;
   }
+      template<typename Reserved, typename... ITypes>
+  friend struct MultiSeqBuilder;
 };
+
 template <hir::Opcode OPCODE, typename DEST, typename SRC1, typename SRC2>
 struct I<OPCODE, DEST, SRC1, SRC2> : DestField<DEST> {
   typedef DestField<DEST> BASE;
@@ -345,7 +352,11 @@ struct I<OPCODE, DEST, SRC1, SRC2> : DestField<DEST> {
     }
     return false;
   }
+    template<typename Reserved, typename... ITypes>
+  friend struct MultiSeqBuilder;
 };
+
+class MultiSequence;
 template <hir::Opcode OPCODE, typename DEST, typename SRC1, typename SRC2,
           typename SRC3>
 struct I<OPCODE, DEST, SRC1, SRC2, SRC3> : DestField<DEST> {
@@ -362,11 +373,7 @@ struct I<OPCODE, DEST, SRC1, SRC2, SRC3> : DestField<DEST> {
   SRC1 src1;
   SRC2 src2;
   SRC3 src3;
-
- protected:
-  template <typename SEQ, typename T>
-  friend struct Sequence;
-  bool Load(const Instr* i) {
+    bool Load(const Instr* i) {
     if (InstrKey(i).value == key && BASE::LoadDest(i)) {
       instr = i;
       src1.Load(i->src1);
@@ -376,6 +383,13 @@ struct I<OPCODE, DEST, SRC1, SRC2, SRC3> : DestField<DEST> {
     }
     return false;
   }
+ protected:
+  template <typename SEQ, typename T>
+  friend struct Sequence;
+  friend class MultiSequence;
+  template<typename Reserved, typename... ITypes>
+  friend struct MultiSeqBuilder;
+
 };
 
 template <typename T>
@@ -430,6 +444,7 @@ struct Sequence {
   static void EmitCommutativeBinaryOp(X64Emitter& e, const EmitArgType& i,
                                       const REG_REG_FN& reg_reg_fn,
                                       const REG_CONST_FN& reg_const_fn) {
+
     if (i.src1.is_constant) {
       if (i.src2.is_constant) {
         // Both constants.
@@ -479,7 +494,8 @@ struct Sequence {
       } else if (i.dest == i.src2) {
         reg_reg_fn(e, i.dest, i.src1);
       } else {
-        e.mov(i.dest, i.src1);
+        if(i.dest != i.src1)
+            e.mov(i.dest, i.src1);
         reg_reg_fn(e, i.dest, i.src2);
       }
     }
@@ -620,6 +636,90 @@ struct Sequence {
     }
   }
 };
+
+
+
+
+template<typename Reserved, typename... ITypes>
+struct MultiSeqBuilder {
+    static constexpr unsigned ninsns = sizeof...(ITypes);
+
+    using LoadType = std::tuple<ITypes...>;
+
+    template<unsigned n = 0>
+    static bool LoadImpl(const hir::Instr* i, LoadType& into) {
+        if(!std::get<n>(into).Load(i)) {
+            return false;
+        } else {
+            return LoadImpl<n+1>(i->next, into);
+        }
+    }
+
+    template<>
+    static bool LoadImpl<ninsns>(const hir::Instr* i, LoadType& into) {
+        return true;
+    }
+
+    static LoadType Load(const hir::Instr* istart, bool& success, const hir::Instr** out_tail) {
+
+
+      const hir::Instr* intermed[ninsns];
+      success = false;
+      auto current_i  = istart;
+      unsigned iindex = 0;
+      for(; iindex < ninsns && current_i; ++iindex) {
+        intermed[iindex] = current_i;
+        current_i = current_i->next;
+      }
+
+      if(iindex != ninsns) {
+        return {};
+      }
+
+
+      auto escapes = [&intermed](unsigned idx) {
+      
+          auto ins = intermed[idx];
+
+          if(!ins->dest)
+              return false;
+          for(auto use = ins->dest->use_head; use; use = use->next) {
+              bool is_in_array = false;
+              for(unsigned j = idx+1; j < ninsns; ++j) {
+                if(intermed[j] == use->instr) {
+                    is_in_array = true;
+                    break;
+                }
+              }
+              if(!is_in_array){
+                return true;
+              }
+          }
+          return false;
+      };
+
+      for(unsigned i = 0; i < ninsns-1; ++i) {
+          //instr escapes multiseq
+        if(escapes(i)){
+
+          return {};
+        }
+      }
+      LoadType result {};
+
+      success = LoadImpl(istart, result);
+
+      if(success) {
+      *out_tail = intermed[ninsns-1]->next;
+      }
+      return result;
+
+
+    }
+
+};
+
+
 
 }  // namespace x64
 }  // namespace backend

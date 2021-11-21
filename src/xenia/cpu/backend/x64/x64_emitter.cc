@@ -93,6 +93,7 @@ bool X64Emitter::Emit(GuestFunction* function, HIRBuilder* builder,
                       uint32_t debug_info_flags, FunctionDebugInfo* debug_info,
                       void** out_code_address, size_t* out_code_size,
                       std::vector<SourceMapEntry>* out_source_map) {
+    currentfunc = function->address();
   SCOPE_profile_cpu_f("cpu");
 
   // Reset.
@@ -659,6 +660,7 @@ static const vec128_t xmm_consts[] = {
     vec128i(0x00010203u, 0x04050607u, 0x08090A0Bu, 0x0C0D0E0Fu),
     /* XMMByteOrderMask       */
     vec128i(0x01000302u, 0x05040706u, 0x09080B0Au, 0x0D0C0F0Eu),
+
     /* XMMPermuteControl15    */ vec128b(15),
     /* XMMPermuteByteMask     */ vec128b(0x1F),
     /* XMMPackD3DCOLORSat     */ vec128i(0x404000FFu),
@@ -738,7 +740,8 @@ static const vec128_t xmm_consts[] = {
     /* XMMIntMaxPD            */ vec128d(INT_MAX),
     /* XMMPosIntMinPS         */ vec128f((float)0x80000000u),
     /* XMMQNaN                */ vec128i(0x7FC00000u),
-        /*XMMOneDouble*/        vec128d(1.0)
+        /*XMMOneDouble*/        vec128d(1.0),
+        vec128f(0.000099999997f), //xmmbungietinynum
 };
 
 // First location to try and place constants.
@@ -756,14 +759,7 @@ static const uintptr_t kConstDataIncrement = 0x00001000;
 // given the current setup.
 uintptr_t X64Emitter::PlaceConstData() {
   uint8_t* ptr = reinterpret_cast<uint8_t*>(kConstDataLocation);
-  void* mem = nullptr;
-  while (!mem) {
-    mem = memory::AllocFixed(
-        ptr, xe::round_up(kConstDataSize, memory::page_size()),
-        memory::AllocationType::kReserveCommit, memory::PageAccess::kReadWrite);
-
-    ptr += kConstDataIncrement;
-  }
+  void* mem = memory::allocate32(kConstDataLocation,kConstDataSize,memory::PageAccess::kReadWrite);
 
   // The pointer must not be greater than 31 bits.
   assert_zero(reinterpret_cast<uintptr_t>(mem) & ~0x7FFFFFFF);

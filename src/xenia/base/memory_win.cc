@@ -8,7 +8,6 @@
  */
 
 #include "xenia/base/memory.h"
-
 #include "xenia/base/platform_win.h"
 
 namespace xe {
@@ -89,6 +88,24 @@ void* AllocFixed(void* base_address, size_t length,
   }
   DWORD protect = ToWin32ProtectFlags(access);
   return VirtualAlloc(base_address, length, alloc_type, protect);
+}
+
+void* allocate32(uintptr_t start, size_t size, PageAccess access) {
+  void* mem = nullptr;
+  unsigned psz = page_size();
+
+  if (size & (psz - 1)) {
+    size = (size + psz) & ~(psz - 1);
+  }
+  while (!mem) {
+    mem =
+        AllocFixed((void*)start, size, memory::AllocationType::kReserveCommit, access);
+    start+= psz;
+  }
+
+  assert_always(((uintptr_t)mem) == ((uint32_t)(uintptr_t)mem));
+
+  return mem;
 }
 
 bool DeallocFixed(void* base_address, size_t length,

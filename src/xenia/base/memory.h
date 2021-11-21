@@ -58,6 +58,7 @@ void* AllocFixed(void* base_address, size_t length,
 // released.
 bool DeallocFixed(void* base_address, size_t length,
                   DeallocationType deallocation_type);
+void* allocate32(uintptr_t start, size_t size, PageAccess access);
 
 // Sets the access rights for the given block of memory and returns the previous
 // access rights. Both base_address and length will be adjusted to page_size().

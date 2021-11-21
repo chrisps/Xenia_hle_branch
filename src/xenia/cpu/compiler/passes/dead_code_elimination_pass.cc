@@ -10,7 +10,7 @@
 #include "xenia/cpu/compiler/passes/dead_code_elimination_pass.h"
 
 #include "xenia/base/profiling.h"
-
+#include "xenia/cpu/function.h"
 namespace xe {
 namespace cpu {
 namespace compiler {
@@ -22,6 +22,7 @@ using namespace xe::cpu::hir;
 using xe::cpu::hir::HIRBuilder;
 using xe::cpu::hir::Instr;
 using xe::cpu::hir::Value;
+using xe::cpu::ppc::PPCBuiltin;
 
 DeadCodeEliminationPass::DeadCodeEliminationPass() : CompilerPass() {}
 
@@ -74,6 +75,12 @@ bool DeadCodeEliminationPass::Run(HIRBuilder* builder) {
       auto prev = i->prev;
 
       auto opcode = i->opcode;
+      if (opcode->num == Opcode::OPCODE_CALL &&
+          (i->src1.symbol->ppc_builtin() == PPCBuiltin::chkstk1 || i->src1.symbol->ppc_builtin() == PPCBuiltin::blrfunc)) {
+        MakeNopRecursive(i);
+        any_instr_removed = true;
+      }
+
       if (!(opcode->flags & OPCODE_FLAG_VOLATILE) && i->dest &&
           !i->dest->use_head) {
         // Has no uses and is not volatile. This instruction can die!
@@ -148,6 +155,7 @@ bool DeadCodeEliminationPass::Run(HIRBuilder* builder) {
 
 void DeadCodeEliminationPass::MakeNopRecursive(Instr* i) {
   i->opcode = &hir::OPCODE_NOP_info;
+  if(i->dest)
   i->dest->def = NULL;
   i->dest = NULL;
 

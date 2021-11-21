@@ -18,6 +18,7 @@
 #include "xenia/cpu/ppc/ppc_context.h"
 #include "xenia/cpu/symbol.h"
 #include "xenia/cpu/thread_state.h"
+#include "ppc/ppc_builtins.h"
 
 namespace xe {
 namespace cpu {
@@ -51,6 +52,12 @@ class Function : public Symbol {
   void set_end_address(uint32_t value) { end_address_ = value; }
   Behavior behavior() const { return behavior_; }
   void set_behavior(Behavior value) { behavior_ = value; }
+
+  ppc::PPCBuiltin ppc_builtin() const {return ppc_builtin_; }
+  void set_ppc_builtin(ppc::PPCBuiltin b){
+    ppc_builtin_=b;
+  }
+
   bool is_guest() const { return behavior_ != Behavior::kBuiltin; }
 
   bool ContainsAddress(uint32_t address) const {
@@ -67,11 +74,15 @@ class Function : public Symbol {
 
   virtual bool Call(ThreadState* thread_state, uint32_t return_address) = 0;
 
+
+
+
  protected:
   Function(Module* module, uint32_t address);
 
   uint32_t end_address_ = 0;
   Behavior behavior_ = Behavior::kDefault;
+  ppc::PPCBuiltin ppc_builtin_ = ppc::PPCBuiltin::Unclassified;
 };
 
 class BuiltinFunction : public Function {

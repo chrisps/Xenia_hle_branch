@@ -519,7 +519,7 @@ GuestToHostThunk X64ThunkEmitter::EmitGuestToHostThunk() {
 }
 
 // X64Emitter handles actually resolving functions.
-extern "C" uint64_t ResolveFunction(void* raw_context, uint32_t target_address);
+
 
 ResolveFunctionThunk X64ThunkEmitter::EmitResolveFunctionThunk() {
   // ebx = target PPC address

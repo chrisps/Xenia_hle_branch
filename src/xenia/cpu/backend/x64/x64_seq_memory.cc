@@ -12,7 +12,6 @@
 #include <algorithm>
 #include <cstring>
 
-#include "xenia/base/memory.h"
 #include "xenia/cpu/backend/x64/x64_op.h"
 #include "xenia/cpu/backend/x64/x64_tracers.h"
 
@@ -28,80 +27,6 @@ RegExp ComputeContextAddress(X64Emitter& e, const OffsetOp& offset) {
   return e.GetContextReg() + offset.value;
 }
 
-template <typename T>
-RegExp ComputeMemoryAddressOffset(X64Emitter& e, const T& guest,
-                                  const T& offset) {
-  assert_true(offset.is_constant);
-  int32_t offset_const = static_cast<int32_t>(offset.constant());
-
-  if (guest.is_constant) {
-    uint32_t address = static_cast<uint32_t>(guest.constant());
-    address += offset_const;
-    if (address < 0x80000000) {
-      return e.GetMembaseReg() + address;
-    } else {
-      if (address >= 0xE0000000 &&
-          xe::memory::allocation_granularity() > 0x1000) {
-        e.mov(e.eax, address + 0x1000);
-      } else {
-        e.mov(e.eax, address);
-      }
-      return e.GetMembaseReg() + e.rax;
-    }
-  } else {
-    if (xe::memory::allocation_granularity() > 0x1000) {
-      // Emulate the 4 KB physical address offset in 0xE0000000+ when can't do
-      // it via memory mapping.
-      e.xor_(e.eax, e.eax);
-      e.cmp(guest.reg().cvt32(), 0xE0000000 - offset_const);
-      e.setae(e.al);
-      e.shl(e.eax, 12);
-      e.add(e.eax, guest.reg().cvt32());
-    } else {
-      // Clear the top 32 bits, as they are likely garbage.
-      // TODO(benvanik): find a way to avoid doing this.
-      e.mov(e.eax, guest.reg().cvt32());
-    }
-    return e.GetMembaseReg() + e.rax + offset_const;
-  }
-}
-
-// Note: most *should* be aligned, but needs to be checked!
-template <typename T>
-RegExp ComputeMemoryAddress(X64Emitter& e, const T& guest) {
-  if (guest.is_constant) {
-    // TODO(benvanik): figure out how to do this without a temp.
-    // Since the constant is often 0x8... if we tried to use that as a
-    // displacement it would be sign extended and mess things up.
-    uint32_t address = static_cast<uint32_t>(guest.constant());
-    if (address < 0x80000000) {
-      return e.GetMembaseReg() + address;
-    } else {
-      if (address >= 0xE0000000 &&
-          xe::memory::allocation_granularity() > 0x1000) {
-        e.mov(e.eax, address + 0x1000);
-      } else {
-        e.mov(e.eax, address);
-      }
-      return e.GetMembaseReg() + e.rax;
-    }
-  } else {
-    if (xe::memory::allocation_granularity() > 0x1000) {
-      // Emulate the 4 KB physical address offset in 0xE0000000+ when can't do
-      // it via memory mapping.
-      e.xor_(e.eax, e.eax);
-      e.cmp(guest.reg().cvt32(), 0xE0000000);
-      e.setae(e.al);
-      e.shl(e.eax, 12);
-      e.add(e.eax, guest.reg().cvt32());
-    } else {
-      // Clear the top 32 bits, as they are likely garbage.
-      // TODO(benvanik): find a way to avoid doing this.
-      e.mov(e.eax, guest.reg().cvt32());
-    }
-    return e.GetMembaseReg() + e.rax;
-  }
-}
 
 // ============================================================================
 // OPCODE_ATOMIC_EXCHANGE
@@ -173,17 +98,7 @@ struct ATOMIC_COMPARE_EXCHANGE_I32
                I<OPCODE_ATOMIC_COMPARE_EXCHANGE, I8Op, I64Op, I32Op, I32Op>> {
   static void Emit(X64Emitter& e, const EmitArgType& i) {
     e.mov(e.eax, i.src2);
-    if (xe::memory::allocation_granularity() > 0x1000) {
-      // Emulate the 4 KB physical address offset in 0xE0000000+ when can't do
-      // it via memory mapping.
-      e.cmp(i.src1.reg().cvt32(), 0xE0000000);
-      e.setae(e.cl);
-      e.movzx(e.ecx, e.cl);
-      e.shl(e.ecx, 12);
-      e.add(e.ecx, i.src1.reg().cvt32());
-    } else {
-      e.mov(e.ecx, i.src1.reg().cvt32());
-    }
+    e.mov(e.ecx, i.src1.reg().cvt32());
     e.lock();
     e.cmpxchg(e.dword[e.GetMembaseReg() + e.rcx], i.src3);
     e.sete(i.dest);
@@ -194,17 +109,7 @@ struct ATOMIC_COMPARE_EXCHANGE_I64
                I<OPCODE_ATOMIC_COMPARE_EXCHANGE, I8Op, I64Op, I64Op, I64Op>> {
   static void Emit(X64Emitter& e, const EmitArgType& i) {
     e.mov(e.rax, i.src2);
-    if (xe::memory::allocation_granularity() > 0x1000) {
-      // Emulate the 4 KB physical address offset in 0xE0000000+ when can't do
-      // it via memory mapping.
-      e.cmp(i.src1.reg().cvt32(), 0xE0000000);
-      e.setae(e.cl);
-      e.movzx(e.ecx, e.cl);
-      e.shl(e.ecx, 12);
-      e.add(e.ecx, i.src1.reg().cvt32());
-    } else {
-      e.mov(e.ecx, i.src1.reg().cvt32());
-    }
+    e.mov(e.ecx, i.src1.reg().cvt32());
     e.lock();
     e.cmpxchg(e.qword[e.GetMembaseReg() + e.rcx], i.src3);
     e.sete(i.dest);
@@ -917,6 +822,90 @@ struct STORE_I16 : Sequence<STORE_I16, I<OPCODE_STORE, VoidOp, I64Op, I16Op>> {
     }
   }
 };
+
+// ============================================================================
+// OPCODE_CACHE_CONTROL
+// ============================================================================
+struct CACHE_CONTROL
+    : Sequence<CACHE_CONTROL,
+               I<OPCODE_CACHE_CONTROL, VoidOp, I64Op, OffsetOp>> {
+  static void Emit(X64Emitter& e, const EmitArgType& i) {
+    bool is_clflush = false, is_prefetch = false;
+    switch (CacheControlType(i.instr->flags)) {
+      case CacheControlType::CACHE_CONTOROL_TYPE_DATA_TOUCH:
+      case CacheControlType::CACHE_CONTOROL_TYPE_DATA_TOUCH_FOR_STORE:
+        is_prefetch = true;
+        break;
+      case CacheControlType::CACHE_CONTOROL_TYPE_DATA_STORE:
+      case CacheControlType::CACHE_CONTOROL_TYPE_DATA_STORE_AND_FLUSH:
+        is_clflush = true;
+        break;
+      default:
+        assert_unhandled_case(CacheControlType(i.instr->flags));
+        return;
+    }
+    size_t cache_line_size = i.src2.value;
+
+    RegExp addr;
+    uint32_t address_constant;
+    if (i.src1.is_constant) {
+      // TODO(benvanik): figure out how to do this without a temp.
+      // Since the constant is often 0x8... if we tried to use that as a
+      // displacement it would be sign extended and mess things up.
+      address_constant = static_cast<uint32_t>(i.src1.constant());
+      if (address_constant < 0x80000000) {
+        addr = e.GetMembaseReg() + address_constant;
+      } else {
+        if (address_constant >= 0xE0000000 &&
+            xe::memory::allocation_granularity() > 0x1000) {
+          e.mov(e.eax, address_constant + 0x1000);
+        } else {
+          e.mov(e.eax, address_constant);
+        }
+        addr = e.GetMembaseReg() + e.rax;
+      }
+    } else {
+      /*if (xe::memory::allocation_granularity() > 0x1000) {
+        // Emulate the 4 KB physical address offset in 0xE0000000+ when can't do
+        // it via memory mapping.
+        e.cmp(i.src1.reg().cvt32(), 0xE0000000);
+        e.setae(e.al);
+        e.movzx(e.eax, e.al);
+        e.shl(e.eax, 12);
+        e.add(e.eax, i.src1.reg().cvt32());
+      } else {
+        // Clear the top 32 bits, as they are likely garbage.
+        // TODO(benvanik): find a way to avoid doing this.*/
+        e.mov(e.eax, i.src1.reg().cvt32());
+    //  }
+      addr = e.GetMembaseReg() + e.rax;
+    }
+   /* if (is_clflush) {
+      e.clflush(e.ptr[addr]);
+    }
+    if (is_prefetch) {
+      e.prefetcht0(e.ptr[addr]);
+    }*/
+
+    if (cache_line_size >= 128) {
+      // Prefetch the other 64 bytes of the 128-byte cache line.
+      if (i.src1.is_constant && address_constant < 0x80000000) {
+        addr = e.GetMembaseReg() + (address_constant ^ 64);
+      } else {
+        e.xor_(e.eax, 64);
+      }
+     /* if (is_clflush) {
+        e.clflush(e.ptr[addr]);
+      }
+      if (is_prefetch) {
+        e.prefetcht0(e.ptr[addr]);
+      }*/
+      assert_true(cache_line_size == 128);
+    }
+  }
+};
+EMITTER_OPCODE_TABLE(OPCODE_CACHE_CONTROL, CACHE_CONTROL);
+
 struct STORE_I32 : Sequence<STORE_I32, I<OPCODE_STORE, VoidOp, I64Op, I32Op>> {
   static void Emit(X64Emitter& e, const EmitArgType& i) {
     auto addr = ComputeMemoryAddress(e, i.src1);
@@ -1036,88 +1025,7 @@ struct STORE_V128
 EMITTER_OPCODE_TABLE(OPCODE_STORE, STORE_I8, STORE_I16, STORE_I32, STORE_I64,
                      STORE_F32, STORE_F64, STORE_V128);
 
-// ============================================================================
-// OPCODE_CACHE_CONTROL
-// ============================================================================
-struct CACHE_CONTROL
-    : Sequence<CACHE_CONTROL,
-               I<OPCODE_CACHE_CONTROL, VoidOp, I64Op, OffsetOp>> {
-  static void Emit(X64Emitter& e, const EmitArgType& i) {
-    bool is_clflush = false, is_prefetch = false;
-    switch (CacheControlType(i.instr->flags)) {
-      case CacheControlType::CACHE_CONTOROL_TYPE_DATA_TOUCH:
-      case CacheControlType::CACHE_CONTOROL_TYPE_DATA_TOUCH_FOR_STORE:
-        is_prefetch = true;
-        break;
-      case CacheControlType::CACHE_CONTOROL_TYPE_DATA_STORE:
-      case CacheControlType::CACHE_CONTOROL_TYPE_DATA_STORE_AND_FLUSH:
-        is_clflush = true;
-        break;
-      default:
-        assert_unhandled_case(CacheControlType(i.instr->flags));
-        return;
-    }
-    size_t cache_line_size = i.src2.value;
 
-    RegExp addr;
-    uint32_t address_constant;
-    if (i.src1.is_constant) {
-      // TODO(benvanik): figure out how to do this without a temp.
-      // Since the constant is often 0x8... if we tried to use that as a
-      // displacement it would be sign extended and mess things up.
-      address_constant = static_cast<uint32_t>(i.src1.constant());
-      if (address_constant < 0x80000000) {
-        addr = e.GetMembaseReg() + address_constant;
-      } else {
-        if (address_constant >= 0xE0000000 &&
-            xe::memory::allocation_granularity() > 0x1000) {
-          e.mov(e.eax, address_constant + 0x1000);
-        } else {
-          e.mov(e.eax, address_constant);
-        }
-        addr = e.GetMembaseReg() + e.rax;
-      }
-    } else {
-      if (xe::memory::allocation_granularity() > 0x1000) {
-        // Emulate the 4 KB physical address offset in 0xE0000000+ when can't do
-        // it via memory mapping.
-        e.cmp(i.src1.reg().cvt32(), 0xE0000000);
-        e.setae(e.al);
-        e.movzx(e.eax, e.al);
-        e.shl(e.eax, 12);
-        e.add(e.eax, i.src1.reg().cvt32());
-      } else {
-        // Clear the top 32 bits, as they are likely garbage.
-        // TODO(benvanik): find a way to avoid doing this.
-        e.mov(e.eax, i.src1.reg().cvt32());
-      }
-      addr = e.GetMembaseReg() + e.rax;
-    }
-    if (is_clflush) {
-      e.clflush(e.ptr[addr]);
-    }
-    if (is_prefetch) {
-      e.prefetcht0(e.ptr[addr]);
-    }
-
-    if (cache_line_size >= 128) {
-      // Prefetch the other 64 bytes of the 128-byte cache line.
-      if (i.src1.is_constant && address_constant < 0x80000000) {
-        addr = e.GetMembaseReg() + (address_constant ^ 64);
-      } else {
-        e.xor_(e.eax, 64);
-      }
-      if (is_clflush) {
-        e.clflush(e.ptr[addr]);
-      }
-      if (is_prefetch) {
-        e.prefetcht0(e.ptr[addr]);
-      }
-      assert_true(cache_line_size == 128);
-    }
-  }
-};
-EMITTER_OPCODE_TABLE(OPCODE_CACHE_CONTROL, CACHE_CONTROL);
 
 // ============================================================================
 // OPCODE_MEMORY_BARRIER

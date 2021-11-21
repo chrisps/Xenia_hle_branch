@@ -86,5 +86,5 @@ class X64Backend : public Backend {
 }  // namespace backend
 }  // namespace cpu
 }  // namespace xe
-
+extern "C" uint64_t ResolveFunction(void* raw_context, uint32_t target_address);
 #endif  // XENIA_CPU_BACKEND_X64_X64_BACKEND_H_

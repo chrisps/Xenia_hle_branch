@@ -75,7 +75,8 @@ EMITTER_OPCODE_TABLE(OPCODE_COMMENT, COMMENT);
 // OPCODE_NOP
 // ============================================================================
 struct NOP : Sequence<NOP, I<OPCODE_NOP, VoidOp>> {
-  static void Emit(X64Emitter& e, const EmitArgType& i) { e.nop(); }
+  static void Emit(X64Emitter& e, const EmitArgType& i) { /* e.nop();*/
+  }
 };
 EMITTER_OPCODE_TABLE(OPCODE_NOP, NOP);
 
@@ -1323,18 +1324,16 @@ EMITTER_OPCODE_TABLE(OPCODE_SUB, SUB_I8, SUB_I16, SUB_I32, SUB_I64, SUB_F32,
 // We exploit mulx here to avoid creating too much register pressure.
 struct MUL_I8 : Sequence<MUL_I8, I<OPCODE_MUL, I8Op, I8Op, I8Op>> {
   static void Emit(X64Emitter& e, const EmitArgType& i) {
-            if(i.src1.is_constant || i.src2.is_constant ) {
-        
+    if (i.src1.is_constant || i.src2.is_constant) {
+      uint64_t cval =
+          i.src1.is_constant ? i.src1.constant() : i.src2.constant();
 
-        uint64_t cval =i.src1.is_constant ? i.src1.constant() : i.src2.constant();
-
-        if(cval < (1ull<<32)) {
-
+      if (cval < (1ull << 32)) {
         auto& whichevs = i.src1.is_constant ? i.src2 : i.src1;
 
-            e.imul(i.dest, whichevs, (int)cval);
-            return;
-        }
+        e.imul(i.dest, whichevs, (int)cval);
+        return;
+      }
     }
     if (e.IsFeatureEnabled(kX64EmitBMI2)) {
       // mulx: $1:$2 = EDX * $3
@@ -1377,18 +1376,16 @@ struct MUL_I8 : Sequence<MUL_I8, I<OPCODE_MUL, I8Op, I8Op, I8Op>> {
 };
 struct MUL_I16 : Sequence<MUL_I16, I<OPCODE_MUL, I16Op, I16Op, I16Op>> {
   static void Emit(X64Emitter& e, const EmitArgType& i) {
-     if(i.src1.is_constant || i.src2.is_constant ) {
-        
+    if (i.src1.is_constant || i.src2.is_constant) {
+      uint64_t cval =
+          i.src1.is_constant ? i.src1.constant() : i.src2.constant();
 
-        uint64_t cval =i.src1.is_constant ? i.src1.constant() : i.src2.constant();
-
-        if(cval < (1ull<<32)) {
-
+      if (cval < (1ull << 32)) {
         auto& whichevs = i.src1.is_constant ? i.src2 : i.src1;
 
-            e.imul(i.dest, whichevs, (int)cval);
-            return;
-        }
+        e.imul(i.dest, whichevs, (int)cval);
+        return;
+      }
     }
     if (e.IsFeatureEnabled(kX64EmitBMI2)) {
       // mulx: $1:$2 = EDX * $3
@@ -1439,18 +1436,16 @@ struct MUL_I32 : Sequence<MUL_I32, I<OPCODE_MUL, I32Op, I32Op, I32Op>> {
       }
     }
 
-        if(i.src1.is_constant || i.src2.is_constant ) {
-        
+    if (i.src1.is_constant || i.src2.is_constant) {
+      uint64_t cval =
+          i.src1.is_constant ? i.src1.constant() : i.src2.constant();
 
-        uint64_t cval =i.src1.is_constant ? i.src1.constant() : i.src2.constant();
-
-        if(cval < (1ull<<32)) {
-
+      if (cval < (1ull << 32)) {
         auto& whichevs = i.src1.is_constant ? i.src2 : i.src1;
 
-            e.imul(i.dest, whichevs, (int)cval);
-            return;
-        }
+        e.imul(i.dest, whichevs, (int)cval);
+        return;
+      }
     }
     if (e.IsFeatureEnabled(kX64EmitBMI2)) {
       // mulx: $1:$2 = EDX * $3
@@ -1503,18 +1498,16 @@ struct MUL_I64 : Sequence<MUL_I64, I<OPCODE_MUL, I64Op, I64Op, I64Op>> {
       }
     }
 
-    if(i.src1.is_constant || i.src2.is_constant ) {
-        
+    if (i.src1.is_constant || i.src2.is_constant) {
+      uint64_t cval =
+          i.src1.is_constant ? i.src1.constant() : i.src2.constant();
 
-        uint64_t cval =i.src1.is_constant ? i.src1.constant() : i.src2.constant();
-
-        if(cval < (1ull<<32)) {
-
+      if (cval < (1ull << 32)) {
         auto& whichevs = i.src1.is_constant ? i.src2 : i.src1;
 
-            e.imul(i.dest, whichevs, (int)cval);
-            return;
-        }
+        e.imul(i.dest, whichevs, (int)cval);
+        return;
+      }
     }
 
     if (e.IsFeatureEnabled(kX64EmitBMI2)) {
@@ -2532,7 +2525,6 @@ struct RSQRT_F64 : Sequence<RSQRT_F64, I<OPCODE_RSQRT, F64Op, F64Op>> {
     e.vmovsd(e.xmm0, e.GetXmmConstPtr(XmmConst::XMMOneDouble));
     e.vsqrtsd(i.dest, i.src1);
     e.vdivsd(i.dest, e.xmm0, i.dest);
-
   }
 };
 struct RSQRT_V128 : Sequence<RSQRT_V128, I<OPCODE_RSQRT, V128Op, V128Op>> {
@@ -2555,8 +2547,8 @@ struct RECIP_F64 : Sequence<RECIP_F64, I<OPCODE_RECIP, F64Op, F64Op>> {
     /*e.vcvtsd2ss(i.dest, i.src1);
     e.vrcpss(i.dest, i.dest);
     e.vcvtss2sd(i.dest, i.dest);*/
-      e.vmovsd(e.xmm0,  e.GetXmmConstPtr(XmmConst::XMMOneDouble));
-      e.vdivsd(i.dest, e.xmm0, i.src1);
+    e.vmovsd(e.xmm0, e.GetXmmConstPtr(XmmConst::XMMOneDouble));
+    e.vdivsd(i.dest, e.xmm0, i.src1);
   }
 };
 struct RECIP_V128 : Sequence<RECIP_V128, I<OPCODE_RECIP, V128Op, V128Op>> {
@@ -3315,20 +3307,326 @@ static int anchor_memory_dest = anchor_memory;
 extern volatile int anchor_vector;
 static int anchor_vector_dest = anchor_vector;
 
-bool SelectSequence(X64Emitter* e, const Instr* i, const Instr** new_tail) {
-  const InstrKey key(i);
-  auto it = sequence_table.find(key);
-  if (it != sequence_table.end()) {
-    if (it->second(*e, i)) {
-      *new_tail = i->next;
-      return true;
+class MultiSequence {
+ public:
+  template <hir::Opcode opc, typename... Ts>
+  static inline auto LoadOp(const Instr* i, bool& success) {
+    I<opc, Ts...> ins{};
+    success = ins.Load(i);
+    return ins;
+  }
+
+  /*
+      returns true if multisequence was applied, and sets new_tail to the next
+     instruction to process consumes multiple in-order instructions, resulting
+     in a less wasteful sequence
+
+  */
+  virtual bool apply(X64Emitter* e, const Instr* i, const Instr** new_tail) {
+    return false;
+  }
+};
+
+template <typename Of>
+class MultiSeqZxLzcnt : public MultiSequence {
+ public:
+  virtual bool apply(X64Emitter* e, const Instr* i, const Instr** new_tail) {
+    using atest = MultiSeqBuilder<void, I<OPCODE_CNTLZ, I8Op, Of>,
+                                  I<OPCODE_ZERO_EXTEND, Of, I8Op>>;
+
+    bool succit = false;
+    auto seqy = atest::Load(i, succit, new_tail);
+
+    if (!succit) return false;
+
+    e->lzcnt(std::get<1>(seqy).dest, std::get<0>(seqy).src1);
+
+    return true;
+  }
+};
+
+  bool value_equal(const hir::Value* x, const hir::Value* y) {
+    if (x->type != y->type) return false;
+
+    if (x->IsConstant() && y->IsConstant()) {
+      return x->IsConstantEQ(const_cast<Value*>(y));
+    } else {
+      if (x->IsConstant() ^ y->IsConstant()) return false;
+
+      return x == y;
     }
   }
-  XELOGE("No sequence match for variant %s", i->opcode->name);
-  return false;
-}
+  template <typename TRegR, typename TRegL>
+  bool irx86_values_eq(TRegR& x, TRegL& y) {
+    if (!value_equal(x.value, y.value)) return false;
 
+    if (!x.is_constant) {
+      return regs_intersect(x, y);
+    }
+    return true;
+  }
+
+  template <typename TXInstr, typename TYInstr>
+  bool compare_opnds_equal(TXInstr& x, TYInstr& y) {
+    return irx86_values_eq(x.src1, y.src1) && irx86_values_eq(x.src2, y.src2);
+  }
+
+  template <typename TRegR, typename TRegL>
+  bool regs_intersect(TRegR& x, TRegL& y) {
+    return x.reg() == y.reg();
+  }
+
+  template <typename InsR>
+  bool boolres_overwrites_cmpterm(InsR& v) {
+    return v.src1.reg().cvt8() == v.dest.reg();
+  }
+template <typename Of>
+class MultiseqCompareSetCr : public MultiSequence {
+ public:
+  using Builder =
+      MultiSeqBuilder<void, I<OPCODE_COMPARE_ULT, I8Op, Of, Of>,
+                      I<OPCODE_STORE_CONTEXT, VoidOp, OffsetOp, I8Op>,
+                      I<OPCODE_COMPARE_UGT, I8Op, Of, Of>,
+                      I<OPCODE_STORE_CONTEXT, VoidOp, OffsetOp, I8Op>,
+                      I<OPCODE_COMPARE_EQ, I8Op, Of, Of>  //,
+                      // I<OPCODE_STORE_CONTEXT, VoidOp, OffsetOp, I8Op>
+                      >;
+
+
+  virtual bool apply(X64Emitter* e, const Instr* i, const Instr** new_tail) {
+    bool succ = false;
+    const Instr* temp_new_tail = nullptr;
+    auto seq = Builder::Load(i, succ, &temp_new_tail);
+
+    if (!succ) return false;
+    using std::get;
+
+    auto& ult_op = get<0>(seq);
+    auto& ugt_op = get<2>(seq);
+    auto& eq_op = get<4>(seq);
+
+    if (!compare_opnds_equal(ult_op, ugt_op) ||
+        !compare_opnds_equal(ult_op, eq_op))
+      return false;
+
+    if (!ult_op.src2.value->IsConstant()) return false;
+
+    auto sto_ult = get<1>(seq);
+    auto sto_ugt = get<3>(seq);
+
+    if (!irx86_values_eq(ult_op.dest, sto_ult.src2) ||
+        !irx86_values_eq(ugt_op.dest, sto_ugt.src2))
+      return false;
+
+    // too complicated 4 me
+    if (ult_op.src1.is_constant) return false;
+
+
+
+    if (boolres_overwrites_cmpterm(ult_op) ||
+        boolres_overwrites_cmpterm(ugt_op))
+      return false;
+
+
+    if ((uint64_t)ult_op.src2.constant() < (65536u)) {
+      e->cmp(ult_op.src1, (uint32_t)ult_op.src2.constant());
+    } else {
+      if (e->ConstantFitsIn32Reg(ult_op.src2.constant())) {
+        e->mov(e->eax, ult_op.src2.constant());
+      } else {
+           e->mov(e->rax, ult_op.src2.constant());
+
+          }
+        if(ult_op.src1.reg().getBit() == 64) {
+        e->cmp(ult_op.src1, e->rax);
+        } else{
+            e->cmp(ult_op.src1, e->eax);
+        }
+      }
+
+      bool need_store_ult_op = false;
+      bool need_store_ugt_op = false;
+      bool need_store_sete_op = false;
+      if (ugt_op.dest.reg() != ult_op.dest.reg() &&
+          ult_op.dest.reg() != eq_op.dest.reg()) {
+        e->setb(ult_op.dest);
+        need_store_ult_op = true;
+      } else {
+        e->setb(e->ptr[e->GetContextReg() + sto_ult.src1.value]);
+      }
+
+      if (ugt_op.dest.reg() != eq_op.dest.reg()) {
+        e->seta(ugt_op.dest);
+        need_store_ugt_op = true;
+      } else {
+        e->seta(e->ptr[e->GetContextReg() + sto_ugt.src1.value]);
+      }
+
+      e->sete(eq_op.dest);
+
+      if (need_store_ult_op) {
+        e->mov(e->ptr[e->GetContextReg() + sto_ult.src1.value], ult_op.dest);
+      }
+
+      if (need_store_ugt_op) {
+        e->mov(e->ptr[e->GetContextReg() + sto_ugt.src1.value], ugt_op.dest);
+      }
+
+      *new_tail = temp_new_tail;
+
+      return true;
+
+  }
+  };
+
+template <typename Of>
+class MultiseqCompareSetCrSigned : public MultiSequence {
+ public:
+  using Builder =
+      MultiSeqBuilder<void, I<OPCODE_COMPARE_SLT, I8Op, Of, Of>,
+                      I<OPCODE_STORE_CONTEXT, VoidOp, OffsetOp, I8Op>,
+                      I<OPCODE_COMPARE_SGT, I8Op, Of, Of>,
+                      I<OPCODE_STORE_CONTEXT, VoidOp, OffsetOp, I8Op>,
+                      I<OPCODE_COMPARE_EQ, I8Op, Of, Of>  //,
+                      // I<OPCODE_STORE_CONTEXT, VoidOp, OffsetOp, I8Op>
+                      >;
+
+
+  virtual bool apply(X64Emitter* e, const Instr* i, const Instr** new_tail) {
+    bool succ = false;
+    const Instr* temp_new_tail = nullptr;
+    auto seq = Builder::Load(i, succ, &temp_new_tail);
+
+    if (!succ) return false;
+    using std::get;
+
+    auto& ult_op = get<0>(seq);
+    auto& ugt_op = get<2>(seq);
+    auto& eq_op = get<4>(seq);
+
+    if (!compare_opnds_equal(ult_op, ugt_op) ||
+        !compare_opnds_equal(ult_op, eq_op))
+      return false;
+
+    if (!ult_op.src2.value->IsConstant()) return false;
+
+    auto sto_ult = get<1>(seq);
+    auto sto_ugt = get<3>(seq);
+
+    if (!irx86_values_eq(ult_op.dest, sto_ult.src2) ||
+        !irx86_values_eq(ugt_op.dest, sto_ugt.src2))
+      return false;
+
+    // too complicated 4 me
+    if (ult_op.src1.is_constant) return false;
+
+
+
+    if (boolres_overwrites_cmpterm(ult_op) ||
+        boolres_overwrites_cmpterm(ugt_op))
+      return false;
+
+
+    if ((uint64_t)ult_op.src2.constant() < (65536u)) {
+      e->cmp(ult_op.src1, (uint32_t)ult_op.src2.constant());
+    } else {
+      if (e->ConstantFitsIn32Reg(ult_op.src2.constant())) {
+        e->mov(e->eax, ult_op.src2.constant());
+      } else {
+           e->mov(e->rax, ult_op.src2.constant());
+
+          }
+        if(ult_op.src1.reg().getBit() == 64) {
+        e->cmp(ult_op.src1, e->rax);
+        } else{
+            e->cmp(ult_op.src1, e->eax);
+        }
+      }
+
+      bool need_store_ult_op = false;
+      bool need_store_ugt_op = false;
+      bool need_store_sete_op = false;
+      if (ugt_op.dest.reg() != ult_op.dest.reg() &&
+          ult_op.dest.reg() != eq_op.dest.reg()) {
+        e->setl(ult_op.dest);
+        need_store_ult_op = true;
+      } else {
+        e->setl(e->ptr[e->GetContextReg() + sto_ult.src1.value]);
+      }
+
+      if (ugt_op.dest.reg() != eq_op.dest.reg()) {
+        e->setg(ugt_op.dest);
+        need_store_ugt_op = true;
+      } else {
+        e->setg(e->ptr[e->GetContextReg() + sto_ugt.src1.value]);
+      }
+
+      e->sete(eq_op.dest);
+
+      if (need_store_ult_op) {
+        e->mov(e->ptr[e->GetContextReg() + sto_ult.src1.value], ult_op.dest);
+      }
+
+      if (need_store_ugt_op) {
+        e->mov(e->ptr[e->GetContextReg() + sto_ugt.src1.value], ugt_op.dest);
+      }
+
+      
+      *new_tail = temp_new_tail;
+
+      return true;
+
+  }
+  };
+
+  static MultiSeqZxLzcnt<I16Op> lzcnt_16{};
+  static MultiSeqZxLzcnt<I32Op> lzcnt_32{};
+  static MultiSeqZxLzcnt<I64Op> lzcnt_64{};
+
+  static MultiseqCompareSetCr<I64Op> mulicomp1{};
+  static MultiseqCompareSetCr<I8Op> mulicomp2{};
+  static MultiseqCompareSetCr<I16Op> mulicomp3{};
+  static MultiseqCompareSetCr<I32Op> mulicomp4{};
+    static MultiseqCompareSetCrSigned<I64Op> mulicomp1s{};
+  static MultiseqCompareSetCrSigned<I8Op> mulicomp2s{};
+  static MultiseqCompareSetCrSigned<I16Op> mulicomp3s{};
+  static MultiseqCompareSetCrSigned<I32Op> mulicomp4s{};
+#if 0
+static MultiseqCompareSetCr<I8Op> mulicomp2 {};
+static MultiseqCompareSetCr<I16Op> mulicomp3 {};
+
+static MultiSequence* multiseqs[] = {
+&lzcnt_16, &lzcnt_32, &lzcnt_64, &mulicomp1,&mulicomp2,&mulicomp3, &mulicomp4};
+#else
+  static MultiSequence* multiseqs[] = {&lzcnt_16,  &lzcnt_32,  &lzcnt_64,
+                                       &mulicomp1, &mulicomp2, &mulicomp4, &mulicomp3,&mulicomp1s, &mulicomp2s, &mulicomp4s, &mulicomp3s};
+#endif
+  bool SelectMultiSequence(X64Emitter* e, const hir::Instr* i,
+                           const hir::Instr** new_tail) {
+    for (auto&& seq : multiseqs) {
+      if (seq->apply(e, i, new_tail)) {
+        return true;
+      }
+    }
+    return false;
+  }
+  bool SelectSequence(X64Emitter* e, const Instr* i, const Instr** new_tail) {
+    if (SelectMultiSequence(e, i, new_tail)) {
+      return true;
+    }
+    const InstrKey key(i);
+    auto it = sequence_table.find(key);
+    if (it != sequence_table.end()) {
+      if (it->second(*e, i)) {
+        *new_tail = i->next;
+        return true;
+      }
+    }
+    XELOGE("No sequence match for variant %s", i->opcode->name);
+    return false;
+  }
+
+}  // namespace x64
 }  // namespace x64
 }  // namespace backend
 }  // namespace cpu
-}  // namespace xe

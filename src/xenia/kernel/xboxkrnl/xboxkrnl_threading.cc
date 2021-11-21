@@ -880,6 +880,7 @@ uint32_t xeKeKfAcquireSpinLock(uint32_t* lock) {
     // Spin!
     // TODO(benvanik): error on deadlock?
     xe::threading::MaybeYield();
+    _mm_pause();
   }
 
   // Raise IRQL to DISPATCH.
@@ -916,6 +917,7 @@ void KeAcquireSpinLockAtRaisedIrql(lpdword_t lock_ptr) {
   // Lock.
   auto lock = reinterpret_cast<uint32_t*>(lock_ptr.host_address());
   while (!xe::atomic_cas(0, 1, lock)) {
+      _mm_pause();
     // Spin!
     // TODO(benvanik): error on deadlock?
   }
@@ -1220,6 +1222,7 @@ pointer_result_t InterlockedPushEntrySList(
     old_head = old_hdr.next.next;
     entry->next = old_hdr.next.next;
     new_hdr.next.next = entry.guest_address();
+
   } while (
       !xe::atomic_cas(*(uint64_t*)(&old_hdr), *(uint64_t*)(&new_hdr),
                       reinterpret_cast<uint64_t*>(plist_ptr.host_address())));

@@ -56,7 +56,7 @@ bool PPCScanner::Scan(GuestFunction* function, FunctionDebugInfo* debug_info) {
   // For debug info, only if needed.
   uint32_t address_reference_count = 0;
   uint32_t instruction_result_count = 0;
-
+  
   uint32_t start_address = static_cast<uint32_t>(function->address());
   uint32_t end_address = static_cast<uint32_t>(function->end_address());
   uint32_t address = start_address;
@@ -64,6 +64,14 @@ bool PPCScanner::Scan(GuestFunction* function, FunctionDebugInfo* debug_info) {
   size_t blocks_found = 0;
   bool in_block = false;
   bool starts_with_mfspr_lr = false;
+  
+  if(address > 0x80000000 && function->ppc_builtin() == PPCBuiltin::Unclassified){
+
+      
+      PPCBuiltin builtin = classify_function_at(memory->TranslateVirtual(address), memory->physical_membase(),function->module());
+
+      function->set_ppc_builtin(builtin);
+  }
   while (true) {
     uint32_t code =
         xe::load_and_swap<uint32_t>(memory->TranslateVirtual(address));

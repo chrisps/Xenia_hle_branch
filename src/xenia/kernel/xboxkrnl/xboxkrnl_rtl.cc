@@ -32,13 +32,49 @@
 namespace xe {
 namespace kernel {
 namespace xboxkrnl {
+#ifdef _MSC_VER
+class ntdllfunc_t {
+  void* m_fn;
 
+ public:
+  ntdllfunc_t(const char* name)
+      : m_fn(GetProcAddress(GetModuleHandleA("ntdll.dll"), name)) {}
+
+  template<typename T, typename... TParams>
+  inline T call(TParams... parms) {
+    return reinterpret_cast<T (*)(TParams...)>(m_fn)(parms...);
+  }
+};
+
+static ntdllfunc_t g_ntfunc_rtlcomparememory{"RtlCompareMemory"};
+#endif
 // https://msdn.microsoft.com/en-us/library/ff561778
 dword_result_t RtlCompareMemory(lpvoid_t source1, lpvoid_t source2,
                                 dword_t length) {
   uint8_t* p1 = source1;
   uint8_t* p2 = source2;
+  #ifdef _MSC_VER
 
+  if(((source1.guest_address() | source2.guest_address() | length) & 31) == 0) {
+        
+      unsigned niters = length|0;
+      
+      niters/= 32;
+
+
+      __m256i* pv1 = (__m256i*)p1;
+      __m256i* pv2  = (__m256i*)p2;
+      unsigned c = 0;
+      for(unsigned i = 0; i < niters; ++i) {
+        auto compare_mask = _mm256_cmpeq_epi8(_mm256_load_si256(&pv1[i]), _mm256_load_si256(&pv2[i]));
+        c += __popcnt(_mm256_movemask_epi8(compare_mask));
+      }
+
+  }else {
+
+  return g_ntfunc_rtlcomparememory.call<DWORD>(source1, source2, length);
+  }
+  #else
   // Note that the return value is the number of bytes that match, so it's best
   // we just do this ourselves vs. using memcmp.
   // On Windows we could use the builtin function.
@@ -51,6 +87,7 @@ dword_result_t RtlCompareMemory(lpvoid_t source1, lpvoid_t source2,
   }
 
   return c;
+  #endif
 }
 DECLARE_XBOXKRNL_EXPORT1(RtlCompareMemory, kMemory, kImplemented);
 
@@ -78,6 +115,7 @@ DECLARE_XBOXKRNL_EXPORT1(RtlCompareMemoryUlong, kMemory, kImplemented);
 // https://msdn.microsoft.com/en-us/library/ff552263
 void RtlFillMemoryUlong(lpvoid_t destination, dword_t length, dword_t pattern) {
   // NOTE: length must be % 4, so we can work on uint32s.
+    
   uint32_t count = length >> 2;
 
   uint32_t* p = destination.as<uint32_t*>();
@@ -438,6 +476,7 @@ void RtlEnterCriticalSection(pointer_t<X_RTL_CRITICAL_SECTION> cs) {
       cs->recursion_count = 1;
       return;
     }
+    _mm_pause();
   }
 
   if (xe::atomic_inc(&cs->lock_count) != 0) {
@@ -512,8 +551,7 @@ static_assert(sizeof(X_TIME_FIELDS) == 16, "Must be LARGEINTEGER");
 // https://support.microsoft.com/en-us/kb/167296
 void RtlTimeToTimeFields(lpqword_t time_ptr,
                          pointer_t<X_TIME_FIELDS> time_fields_ptr) {
-  if (!time_ptr.value())
-    return;
+  if (!time_ptr.value()) return;
 
   int64_t time_ms = time_ptr.value() / 10000 - 11644473600000LL;
   time_t timet = time_ms / 1000;
@@ -527,7 +565,6 @@ void RtlTimeToTimeFields(lpqword_t time_ptr,
   time_fields_ptr->second = tm->tm_sec;
   time_fields_ptr->milliseconds = time_ms % 1000;
   time_fields_ptr->weekday = tm->tm_wday;
-
 }
 DECLARE_XBOXKRNL_EXPORT1(RtlTimeToTimeFields, kNone, kImplemented);
 

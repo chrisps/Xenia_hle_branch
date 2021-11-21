@@ -460,6 +460,8 @@ static bool redundant_local_slot_load_optimizer(HIRBuilder* builder,
   }
   return did_change;
 }
+
+
 /*
 Re-enable these one by one or add flags to control them until each is proven to be stable
 

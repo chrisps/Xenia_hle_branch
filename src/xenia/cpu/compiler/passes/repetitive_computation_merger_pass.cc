@@ -825,6 +825,9 @@ void dump_opts() {
 static const optblock_pass_t g_passes[] = {run_optrules, nop_deleter};
 #endif
 
+
+
+
 static bool did_atexit = false;
 
 bool RepetitiveComputationMergerPass::RunPerBlock(hir::HIRBuilder* builder,
